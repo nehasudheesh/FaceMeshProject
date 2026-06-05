@@ -1,11 +1,13 @@
 import cv2
 import time
 import mediapipe as mp
+import pyautogui
 
 # -----------------------------
 # Face Mesh Setup
 # -----------------------------
 mp_face_mesh = mp.solutions.face_mesh
+
 face_mesh = mp_face_mesh.FaceMesh(
     max_num_faces=1,
     refine_landmarks=True,
@@ -14,41 +16,100 @@ face_mesh = mp_face_mesh.FaceMesh(
 )
 
 mp_drawing = mp.solutions.drawing_utils
-drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
 # -----------------------------
-# Blink Detection Variables
+# Screen Setup
+# -----------------------------
+screen_w, screen_h = pyautogui.size()
+
+# Safety
+pyautogui.FAILSAFE = False
+
+# -----------------------------
+# Eye Tracking Landmarks
+# -----------------------------
+LEFT_EYE_LEFT = 33
+LEFT_EYE_RIGHT = 133
+LEFT_IRIS = 468
+
+# -----------------------------
+# Blink Variables
 # -----------------------------
 blink_count = 0
 eye_closed = False
+
+# -----------------------------
+# Cursor Smoothing
+# -----------------------------
+smooth_x = screen_w // 2
+smooth_y = screen_h // 2
+
+SMOOTHING = 0.35
 
 # -----------------------------
 # Webcam
 # -----------------------------
 cap = cv2.VideoCapture(0)
 
-prev_time = 0
+prev_time = time.time()
 
 while True:
+
     success, frame = cap.read()
+
     if not success:
         break
 
     frame = cv2.flip(frame, 1)
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    result = face_mesh.process(rgb_frame)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    if result.multi_face_landmarks:
-        landmarks = result.multi_face_landmarks[0].landmark
+    results = face_mesh.process(rgb)
 
-        # Draw face mesh
+    if results.multi_face_landmarks:
+
+        face_landmarks = results.multi_face_landmarks[0]
+
+        # Draw Face Mesh
         mp_drawing.draw_landmarks(
             frame,
-            result.multi_face_landmarks[0],
-            mp_face_mesh.FACEMESH_TESSELATION,
-            drawing_spec,
-            drawing_spec
+            face_landmarks,
+            mp_face_mesh.FACEMESH_TESSELATION
+        )
+
+        landmarks = face_landmarks.landmark
+
+        # -----------------------------
+        # Eye Tracking
+        # -----------------------------
+        left_x = landmarks[LEFT_EYE_LEFT].x
+        right_x = landmarks[LEFT_EYE_RIGHT].x
+        iris_x = landmarks[LEFT_IRIS].x
+        iris_y = landmarks[LEFT_IRIS].y
+
+        eye_center = (left_x + right_x) / 2
+        eye_width = right_x - left_x
+
+        relative_x = (iris_x - eye_center) / eye_width
+
+        # Amplify eye movement
+        amplified_x = 0.5 + (relative_x * 3)
+
+        amplified_x = max(0, min(1, amplified_x))
+        iris_y = max(0, min(1, iris_y))
+
+        target_x = int(amplified_x * screen_w)
+        target_y = int(iris_y * screen_h)
+
+        # -----------------------------
+        # Smooth Mouse Movement
+        # -----------------------------
+        smooth_x += (target_x - smooth_x) * SMOOTHING
+        smooth_y += (target_y - smooth_y) * SMOOTHING
+
+        pyautogui.moveTo(
+            int(smooth_x),
+            int(smooth_y)
         )
 
         # -----------------------------
@@ -60,58 +121,83 @@ while True:
         eye_gap = left_eye_bottom - left_eye_top
 
         if eye_gap < 0.008:
+
             if not eye_closed:
+
                 blink_count += 1
                 eye_closed = True
+
+                # Mouse Click
+                pyautogui.click()
+
         else:
             eye_closed = False
 
         # -----------------------------
-        # Improved Eye Tracking
+        # Eye Direction Display
         # -----------------------------
-        left_corner_x = landmarks[33].x
-        right_corner_x = landmarks[133].x
-        iris_x = landmarks[468].x
-
-        # Eye center
-        eye_center = (left_corner_x + right_corner_x) / 2
-
-        # Normalize deviation
-        offset = iris_x - eye_center
-
-        # Scale factor
-        eye_width = right_corner_x - left_corner_x
-        normalized_offset = offset / eye_width
-
-        eye_direction = "CENTER"
-
-        if normalized_offset < -0.15:
+        if relative_x < -0.15:
             eye_direction = "LEFT"
-        elif normalized_offset > 0.15:
+        elif relative_x > 0.15:
             eye_direction = "RIGHT"
+        else:
+            eye_direction = "CENTER"
 
         # -----------------------------
-        # Display Info
+        # Display Information
         # -----------------------------
-        cv2.putText(frame, f"Blinks: {blink_count}", (20, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(
+            frame,
+            f"Blinks: {blink_count}",
+            (20, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 0, 0),
+            2
+        )
 
-        cv2.putText(frame, f"Eye: {eye_direction}", (20, 140),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+        cv2.putText(
+            frame,
+            f"Eye: {eye_direction}",
+            (20, 140),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            "MOUSE CONTROL ACTIVE",
+            (20, 200),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2
+        )
 
     # -----------------------------
     # FPS Counter
     # -----------------------------
-    curr_time = time.time()
-    fps = 1 / (curr_time - prev_time)
-    prev_time = curr_time
+    current_time = time.time()
 
-    cv2.putText(frame, f"FPS: {int(fps)}", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    fps = 1 / (current_time - prev_time)
 
-    cv2.imshow("Face Mesh Project", frame)
+    prev_time = current_time
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    cv2.putText(
+        frame,
+        f"FPS: {int(fps)}",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 0, 255),
+        2
+    )
+
+    cv2.imshow("FaceMesh V5 - Mouse Control", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
