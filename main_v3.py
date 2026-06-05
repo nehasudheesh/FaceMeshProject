@@ -1,12 +1,12 @@
 import cv2
 import time
 import mediapipe as mp
-import numpy as np
 
 # -----------------------------
 # Face Mesh Setup
 # -----------------------------
 mp_face_mesh = mp.solutions.face_mesh
+
 face_mesh = mp_face_mesh.FaceMesh(
     max_num_faces=1,
     refine_landmarks=True,
@@ -15,23 +15,16 @@ face_mesh = mp_face_mesh.FaceMesh(
 )
 
 mp_drawing = mp.solutions.drawing_utils
-drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
 # -----------------------------
-# Landmark indices
+# Eye Tracking Landmarks
 # -----------------------------
-LEFT_EYE_LEFT_CORNER = 33
-LEFT_EYE_RIGHT_CORNER = 133
-LEFT_IRIS_CENTER = 468
-
-NOSE_TIP = 1
-CHIN = 152
-FOREHEAD = 10
-LEFT_FACE = 234
-RIGHT_FACE = 454
+LEFT_EYE_LEFT = 33
+LEFT_EYE_RIGHT = 133
+LEFT_IRIS = 468
 
 # -----------------------------
-# Blink variables
+# Blink Variables
 # -----------------------------
 blink_count = 0
 eye_closed = False
@@ -44,26 +37,30 @@ cap = cv2.VideoCapture(0)
 prev_time = 0
 
 while True:
+
     success, frame = cap.read()
+
     if not success:
         break
 
     frame = cv2.flip(frame, 1)
-    h, w, _ = frame.shape
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    result = face_mesh.process(rgb_frame)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    if result.multi_face_landmarks:
-        landmarks = result.multi_face_landmarks[0].landmark
+    results = face_mesh.process(rgb)
 
+    if results.multi_face_landmarks:
+
+        face_landmarks = results.multi_face_landmarks[0]
+
+        # Draw Face Mesh
         mp_drawing.draw_landmarks(
             frame,
-            result.multi_face_landmarks[0],
-            mp_face_mesh.FACEMESH_TESSELATION,
-            drawing_spec,
-            drawing_spec
+            face_landmarks,
+            mp_face_mesh.FACEMESH_TESSELATION
         )
+
+        landmarks = face_landmarks.landmark
 
         # -----------------------------
         # Blink Detection
@@ -81,63 +78,72 @@ while True:
             eye_closed = False
 
         # -----------------------------
-        # Eye Tracking (stable version)
+        # Eye Tracking
         # -----------------------------
-        left_x = landmarks[33].x
-        right_x = landmarks[133].x
-        iris_x = landmarks[468].x
+        left_x = landmarks[LEFT_EYE_LEFT].x
+        right_x = landmarks[LEFT_EYE_RIGHT].x
+        iris_x = landmarks[LEFT_IRIS].x
 
         eye_center = (left_x + right_x) / 2
+
         offset = iris_x - eye_center
+
         eye_width = right_x - left_x
 
-        normalized_offset = offset / eye_width
+        ratio = offset / eye_width
 
-        eye_direction = "CENTER"
-
-        if normalized_offset < -0.15:
+        if ratio < -0.15:
             eye_direction = "LEFT"
-        elif normalized_offset > 0.15:
+        elif ratio > 0.15:
             eye_direction = "RIGHT"
-
-        # -----------------------------
-        # Simple Head Pose (stable fallback)
-        # -----------------------------
-        nose_y = landmarks[NOSE_TIP].y
-        chin_y = landmarks[CHIN].y
-
-        head_direction = "CENTER"
-
-        if nose_y < chin_y - 0.08:
-            head_direction = "HEAD UP"
-        elif nose_y > chin_y - 0.02:
-            head_direction = "HEAD DOWN"
+        else:
+            eye_direction = "CENTER"
 
         # -----------------------------
         # Display
         # -----------------------------
-        cv2.putText(frame, f"Blinks: {blink_count}", (20, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(
+            frame,
+            f"Blinks: {blink_count}",
+            (20, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 0, 0),
+            2
+        )
 
-        cv2.putText(frame, f"Eye: {eye_direction}", (20, 140),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
-
-        cv2.putText(frame, f"Head: {head_direction}", (20, 200),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+        cv2.putText(
+            frame,
+            f"Eye: {eye_direction}",
+            (20, 140),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 255),
+            2
+        )
 
     # -----------------------------
     # FPS Counter
     # -----------------------------
-    curr_time = time.time()
-    fps = 1 / (curr_time - prev_time)
-    prev_time = curr_time
+    current_time = time.time()
 
-    cv2.putText(frame, f"FPS: {int(fps)}", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    fps = 1 / (current_time - prev_time)
 
-    cv2.imshow("Face Mesh Project", frame)
+    prev_time = current_time
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    cv2.putText(
+        frame,
+        f"FPS: {int(fps)}",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 255, 0),
+        2
+    )
+
+    cv2.imshow("FaceMesh V3 - Eye Tracking", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
