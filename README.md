@@ -1,35 +1,22 @@
-# Face Mesh Detection using MediaPipe
+# FaceMesh Project
 
-## Overview
-
-This project performs real-time facial landmark detection using OpenCV and MediaPipe Face Landmarker.
+A real-time Computer Vision project built using MediaPipe and OpenCV.
 
 ## Features
+- Face Mesh Detection
+- Blink Detection
+- Eye Tracking
+- Head Pose Estimation
+- Eye Controlled Mouse
+- Blink Click
 
-* Real-time webcam feed
-* 478 facial landmarks
-* FPS counter
-* Landmark count display
-
-## Technologies Used
-
-* Python
-* OpenCV
-* MediaPipe
-
-## Project Structure
-
-FaceMeshProject/
-├── models/
-├── screenshots/
-├── main.py
-├── requirements.txt
-└── README.md
-
-## Installation
-
-pip install -r requirements.txt
+## Tech Stack
+- Python
+- OpenCV
+- MediaPipe
+- PyAutoGUI
 
 ## Run
 
+pip install -r requirements.txt
 python main.py
